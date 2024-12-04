@@ -13,6 +13,7 @@
 #include <libgen.h>
 #include <time.h>
 
+#define URL_MAX_LEN 2048
 #define BUFFER_LEN 2048
 #define FTP_PORT 21
 #define BAR_WIDTH 24
@@ -43,8 +44,8 @@ void print_error(const char *function_name, const char *message_format, ...) {
 }
 
 int parse_url(char *url, FtpUrl *ftp_url) {
-    if (strlen(url) > BUFFER_LEN) {
-        fprintf(stderr, "URL max length exceeded\n");
+    if (strlen(url) > URL_MAX_LEN) {
+        print_error(__func__, "URL max length exceeded");
         return 1;
     }
 
@@ -52,7 +53,7 @@ int parse_url(char *url, FtpUrl *ftp_url) {
     char *schemeless_url = strtok(NULL, "");
 
     if (scheme == NULL || strncmp(schemeless_url, "//", 2) != 0) {
-        fprintf(stderr, "Bad URL\n");
+        print_error(__func__, "Bad URL");
         return 1;
     }
 
@@ -67,12 +68,12 @@ int parse_url(char *url, FtpUrl *ftp_url) {
     char *path = strtok(NULL, "");
 
     if (domain == NULL || path == NULL) {
-        fprintf(stderr, "Bad URL\n");
+        print_error(__func__, "Bad URL");
         return 1;
     }
 
     if (strcmp(scheme, "ftp") != 0) {
-        fprintf(stderr, "Invalid schema %s\n", scheme);
+        print_error(__func__, "Invalid schema %s", scheme);
         return 1;
     }
 
@@ -177,13 +178,32 @@ int ignore_until_end(int sockfd, Message *message) {
     return 0;
 }
 
-int check_code(Message *message, int expected_code) {
-    if (message->code != expected_code) {
-        print_error(__func__, "Invalid response (code %d, expected %d)\n", message->code, expected_code);
-        return 1;
+int check_code(Message *message, ...) {
+    va_list args;
+    va_start(args, message);
+
+    for (int expected_code = va_arg(args, int); expected_code != 0; expected_code = va_arg(args, int)) {
+        if (message->code == expected_code) {
+            return 0;
+        }
     }
 
-    return 0;
+    va_end(args);
+
+    fprintf(stderr, "Error in %s: Invalid response (code %d, expected ", __func__, message->code);
+
+    va_start(args, message);
+    for (int i = 0, expected_code = va_arg(args, int); expected_code != 0; i++, expected_code = va_arg(args, int)) {
+        if (i > 0) {
+            fprintf(stderr, "/");
+        }
+        fprintf(stderr, "%d", expected_code);
+    }
+    va_end(args);
+
+    fprintf(stderr, ")\n");
+
+    return 1;
 }
 
 int send_command(int sockfd, const char *command_format, ...) {
@@ -296,31 +316,31 @@ int main(int argc, char **argv) {
         return 1;
     }
     if (ignore_until_end(passive_sockfd, &message)
-        || check_code(&message, 220)) {
+        || check_code(&message, 220, NULL)) {
         return 1;
     }
 
     if (send_command(passive_sockfd, "USER %s", ftp_url.username)
         || ignore_until_end(passive_sockfd, &message)
-        || check_code(&message, 331)) {
+        || check_code(&message, 331, NULL)) {
         return 1;
     }
 
     if (send_command(passive_sockfd, "PASS %s", ftp_url.password)
         || ignore_until_end(passive_sockfd, &message)
-        || check_code(&message, 230)) {
+        || check_code(&message, 230, NULL)) {
         return 1;
     }
 
     if (send_command(passive_sockfd, "TYPE I")
         || ignore_until_end(passive_sockfd, &message)
-        || check_code(&message, 200)) {
+        || check_code(&message, 200, NULL)) {
         return 1;
     }
 
     if (send_command(passive_sockfd, "SIZE %s", ftp_url.path)
         || ignore_until_end(passive_sockfd, &message)
-        || check_code(&message, 213)) {
+        || check_code(&message, 213, NULL)) {
         return 1;
     }
     if (sscanf(message.content, "%lu", &filesize) != 1) {
@@ -330,7 +350,7 @@ int main(int argc, char **argv) {
 
     if (send_command(passive_sockfd, "PASV")
         || ignore_until_end(passive_sockfd, &message)
-        || check_code(&message, 227)) {
+        || check_code(&message, 227, NULL)) {
         return 1;
     }
 
@@ -347,7 +367,7 @@ int main(int argc, char **argv) {
 
     if (send_command(passive_sockfd, "RETR %s", ftp_url.path)
         || ignore_until_end(passive_sockfd, &message)
-        || check_code(&message, 150)) {
+        || check_code(&message, 150, 125, NULL)) {
         return 1;
     }
 
@@ -365,7 +385,10 @@ int main(int argc, char **argv) {
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
 
-    print_transfer_stats(total_bytes, start, end);
+    if (close(file_fd) || close(active_sockfd)) {
+        perror("close()");
+        return 1;
+    }
 
     if (read_message(passive_sockfd, &message) || check_code(&message, 226)) {
         return 1;
@@ -373,14 +396,16 @@ int main(int argc, char **argv) {
 
     if (send_command(passive_sockfd, "QUIT")
         || read_message(passive_sockfd, &message)
-        || check_code(&message, 221)) {
+        || check_code(&message, 221, NULL)) {
         return 1;
     }
 
-    if (close(file_fd) || close(active_sockfd) || close(passive_sockfd)) {
+    if (close(passive_sockfd)) {
         perror("close()");
         return 1;
     }
+
+    print_transfer_stats(total_bytes, start, end);
 
     return 0;
 }
