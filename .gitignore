@@ -1,2 +1,5 @@
-download
-download.o
+*
+!download.c
+Makefile
+README.md
+example/
