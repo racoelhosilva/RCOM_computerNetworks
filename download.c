@@ -114,12 +114,12 @@ int get_socket_fd_addr(const char *addr, uint16_t port) {
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
         perror("socket()");
-        return 1;
+        return -1;
     }
 
     if (connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
         perror("connect()");
-        return 1;
+        return -1;
     }
 
     printf("Connected to %s:%d\n", addr, port);
