@@ -1,16 +1,16 @@
 CC = gcc
 CFLAGS = -Wall -Werror -pedantic
-TARGET = download
+BIN = bin
 
-all: $(TARGET)
+all: download
 
-$(TARGET): download.o
-	$(CC) $(CFLAGS) -o $(TARGET) download.o
+download: download.o
+	$(CC) $(CFLAGS) -o $(BIN)/download $(BIN)/download.o
 
 download.o: download.c
-	$(CC) $(CFLAGS) -c download.c
+	$(CC) $(CFLAGS) -c download.c -o $(BIN)/download.o
 
 clean:
-	rm -f $(TARGET) download.o
+	rm -f $(BIN)/*
 
 .PHONY: all clean
