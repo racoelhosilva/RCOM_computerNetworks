@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <libgen.h>
 #include <time.h>
+#include <bsd/string.h>
 
 #define URL_MAX_LEN 2048
 #define BUFFER_LEN 2048
@@ -19,15 +20,15 @@
 #define BAR_WIDTH 24
 
 typedef struct {
-    char username[BUFFER_LEN];
-    char password[BUFFER_LEN];
-    char domain[BUFFER_LEN];
-    char path[BUFFER_LEN];
+    char username[BUFFER_LEN + 1];
+    char password[BUFFER_LEN + 1];
+    char domain[BUFFER_LEN + 1];
+    char path[BUFFER_LEN + 1];
 } FtpUrl;
 
 typedef struct {
     int code;
-    char content[BUFFER_LEN];
+    char content[BUFFER_LEN + 1];
     bool final;
 } Message;
 
@@ -86,10 +87,10 @@ int parse_url(char *url, FtpUrl *ftp_url) {
         password = "anonymous";
     }
 
-    strcpy(ftp_url->username, username);
-    strcpy(ftp_url->password, password);
-    strcpy(ftp_url->domain, domain);
-    strcpy(ftp_url->path, path);
+    strlcpy(ftp_url->username, username, BUFFER_LEN);
+    strlcpy(ftp_url->password, password, BUFFER_LEN);
+    strlcpy(ftp_url->domain, domain, BUFFER_LEN);
+    strlcpy(ftp_url->path, path, BUFFER_LEN);
 
     return 0;
 }
@@ -113,12 +114,12 @@ int get_socket_fd_addr(const char *addr, uint16_t port) {
     server_addr.sin_port = htons(port);
 
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-        perror("socket()");
+        print_error(__func__, "socket() failed");
         return -1;
     }
 
     if (connect(sockfd, (struct sockaddr *) &server_addr, sizeof(server_addr)) < 0) {
-        perror("connect()");
+        print_error(__func__, "connect() failed");
         return -1;
     }
 
@@ -132,7 +133,7 @@ int get_socket_fd_host(const struct hostent *host, uint16_t port) {
 }
 
 int read_message(int sockfd, Message *message) {
-    char buffer[BUFFER_LEN], separator;
+    char buffer[BUFFER_LEN + 1], separator;
 
     while (true) {
         int i = 0;
@@ -145,11 +146,11 @@ int read_message(int sockfd, Message *message) {
 
         printf("    \x1B[2;37m%s\x1B[0m\n", buffer);
 
-        int res;
-        if ((res = sscanf(buffer, "%d%c%[^\r\n]", &message->code, &separator, message->content)) < 2) {
+        int res, n;
+        if ((res = sscanf(buffer, "%d%c%n", &message->code, &separator, &n)) == 2) {  // %n does not count for the argument count
+            strcpy(message->content, buffer + n);
+        } else {
             continue;
-        } else if (res == 2) {
-            message->content[0] = '\0';
         }
         break;
     }
@@ -207,12 +208,12 @@ int check_code(Message *message, ...) {
 }
 
 int send_command(int sockfd, const char *command_format, ...) {
-    char command[BUFFER_LEN];
+    char command[BUFFER_LEN + 1];
 
     va_list args;
     va_start(args, command_format);
 
-    int len = vsnprintf(command, BUFFER_LEN - 3, command_format, args);
+    int len = vsnprintf(command, BUFFER_LEN - 2, command_format, args);
     sprintf(command + len, "\r\n");
 
     va_end(args);
@@ -252,8 +253,7 @@ int parse_pasv_response(const char *response, char *addr, uint16_t *port) {
         return 1;
     }
 
-    int len = sprintf(addr, "%hhu.%hhu.%hhu.%hhu", addr_bytes[0], addr_bytes[1], addr_bytes[2], addr_bytes[3]);
-    addr[len] = '\0';
+    sprintf(addr, "%hhu.%hhu.%hhu.%hhu", addr_bytes[0], addr_bytes[1], addr_bytes[2], addr_bytes[3]);
     *port = port_bytes[0] * 256 + port_bytes[1];
 
     return 0;
@@ -386,7 +386,7 @@ int main(int argc, char **argv) {
     clock_gettime(CLOCK_MONOTONIC, &end);
 
     if (close(file_fd) || close(active_sockfd)) {
-        perror("close()");
+        print_error(__func__, "close() failed");
         return 1;
     }
 
@@ -401,7 +401,7 @@ int main(int argc, char **argv) {
     }
 
     if (close(passive_sockfd)) {
-        perror("close()");
+        print_error(__func__, "close() failed");
         return 1;
     }
 
