@@ -14,11 +14,12 @@
 #include <time.h>
 #include <unistd.h>
 
-#define URL_MAX_LEN 2048
-#define BUFFER_LEN 2048
-#define FTP_PORT 21
-#define BAR_WIDTH 24
+#define URL_MAX_LEN 2048  // Maximum length of an URL
+#define BUFFER_LEN 2048   // Maximum length of a buffer
+#define FTP_PORT 21       // FTP default port number
+#define BAR_WIDTH 24      // Width of the progress bar
 
+// Structure to store the FTP URL components
 typedef struct {
     char username[BUFFER_LEN + 1];
     char password[BUFFER_LEN + 1];
@@ -26,6 +27,7 @@ typedef struct {
     char path[BUFFER_LEN + 1];
 } FtpUrl;
 
+// Structure to store a message received from the server
 typedef struct {
     int code;
     char content[BUFFER_LEN + 1];
@@ -33,6 +35,7 @@ typedef struct {
 } Message;
 
 
+// Print an error message
 void print_error(const char *function_name, const char *message_format, ...) {
     va_list args;
     va_start(args, message_format);
@@ -44,6 +47,8 @@ void print_error(const char *function_name, const char *message_format, ...) {
     va_end(args);
 }
 
+// Parse an URL, storing its components in a FtpUrl structure
+// Return 0 on success and non-zero otherwise
 int parse_url(char *url, FtpUrl *ftp_url) {
     if (strlen(url) > URL_MAX_LEN) {
         print_error(__func__, "URL max length exceeded");
@@ -95,6 +100,7 @@ int parse_url(char *url, FtpUrl *ftp_url) {
     return 0;
 }
 
+// Get the host information from a domain, using gethostbyname
 struct hostent *get_host(const char *domain) {
     struct hostent *host;
     if ((host = gethostbyname(domain)) == NULL) {
@@ -104,6 +110,8 @@ struct hostent *get_host(const char *domain) {
     return host;
 }
 
+// Get a socket file descriptor connected to a given address and port
+// Return the socket file descriptor on success and -1 otherwise
 int get_socket_fd_addr(const char *addr, uint16_t port) {
     struct sockaddr_in server_addr;
     int sockfd;
@@ -127,11 +135,15 @@ int get_socket_fd_addr(const char *addr, uint16_t port) {
     return sockfd;
 }
 
+// Returns a socket file descriptor connected to a specific host and port
+// Return the socket file descriptor on success and -1 otherwise
 int get_socket_fd_host(const struct hostent *host, uint16_t port) {
     const char *addr = inet_ntoa(*((struct in_addr *) host->h_addr));
     return get_socket_fd_addr(addr, port);
 }
 
+// Read a line from a socket, storing the corresponding info in a Message structure
+// Return 0 on success and non-zero otherwise
 int read_message(int sockfd, Message *message) {
     char buffer[BUFFER_LEN + 1], separator;
 
@@ -170,6 +182,8 @@ int read_message(int sockfd, Message *message) {
     return 0;
 }
 
+// Read the final line of a socket response, ignoring all the previous ones
+// Return 0 on success and non-zero otherwise
 int ignore_until_end(int sockfd, Message *message) {
     do {
         if (read_message(sockfd, message))
@@ -179,6 +193,8 @@ int ignore_until_end(int sockfd, Message *message) {
     return 0;
 }
 
+// Check if a message has a specific code
+// Return 0 if the code is the expected one and non-zero otherwise
 int check_code(Message *message, ...) {
     va_list args;
     va_start(args, message);
@@ -207,6 +223,8 @@ int check_code(Message *message, ...) {
     return 1;
 }
 
+// Send a command to a socket
+// Return 0 on success and non-zero otherwise
 int send_command(int sockfd, const char *command_format, ...) {
     char command[BUFFER_LEN + 1];
 
@@ -227,6 +245,7 @@ int send_command(int sockfd, const char *command_format, ...) {
     return 0;
 }
 
+// Print a progress bar
 void print_progress(size_t current, size_t total) {
     int width = current * BAR_WIDTH / total;
 
@@ -240,6 +259,8 @@ void print_progress(size_t current, size_t total) {
     fflush(stdout);
 }
 
+// Parse the address and port from a "Passive Mode" response
+// Return 0 on success and non-zero otherwise
 int parse_pasv_response(const char *response, char *addr, uint16_t *port) {
     uint8_t addr_bytes[4], port_bytes[2];
 
@@ -259,6 +280,8 @@ int parse_pasv_response(const char *response, char *addr, uint16_t *port) {
     return 0;
 }
 
+// Reduce a size to the most appropriate unit
+// Gives the most appropriate unit and the corresponding size modifier
 void reduce_unit(size_t size, char **unit, size_t *size_modifier) {
     if (size > 1024 * 1024) {
         *size_modifier = 1024 * 1024;
@@ -273,6 +296,7 @@ void reduce_unit(size_t size, char **unit, size_t *size_modifier) {
     }
 }
 
+// Print transfer statistics
 void print_transfer_stats(size_t bytes, struct timespec start, struct timespec end) {
     double total_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
     double speed = bytes / total_time;
