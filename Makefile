@@ -4,13 +4,13 @@ BIN = bin
 
 all: download
 
-download: download.o
-	$(CC) $(CFLAGS) -o $(BIN)/download $(BIN)/download.o
+download: download.c bin
+	$(CC) $(CFLAGS) download.c -o $(BIN)/download
 
-download.o: download.c
-	$(CC) $(CFLAGS) -c download.c -o $(BIN)/download.o
+bin:
+	mkdir -p $(BIN)
 
 clean:
-	rm -f $(BIN)/*
+	rm -rf $(BIN)/*
 
 .PHONY: all clean
