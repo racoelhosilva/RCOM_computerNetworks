@@ -1,18 +1,18 @@
+#include <stdarg.h>
 #include <stdbool.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
 
-#include <netdb.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <unistd.h>
-#include <sys/stat.h>
+#include <bsd/string.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/stat.h>
 #include <time.h>
-#include <bsd/string.h>
+#include <unistd.h>
 
 #define URL_MAX_LEN 2048
 #define BUFFER_LEN 2048
@@ -310,36 +310,36 @@ int main(int argc, char **argv) {
     }
 
     Message message;
-    int passive_sockfd = get_socket_fd_host(host, FTP_PORT);
-    if (passive_sockfd < 0) {
+    int control_sockfd = get_socket_fd_host(host, FTP_PORT);
+    if (control_sockfd < 0) {
         print_error(__func__, "get_socket_fd_addr() failed");
         return 1;
     }
-    if (ignore_until_end(passive_sockfd, &message)
+    if (ignore_until_end(control_sockfd, &message)
         || check_code(&message, 220, NULL)) {
         return 1;
     }
 
-    if (send_command(passive_sockfd, "USER %s", ftp_url.username)
-        || ignore_until_end(passive_sockfd, &message)
+    if (send_command(control_sockfd, "USER %s", ftp_url.username)
+        || ignore_until_end(control_sockfd, &message)
         || check_code(&message, 331, NULL)) {
         return 1;
     }
 
-    if (send_command(passive_sockfd, "PASS %s", ftp_url.password)
-        || ignore_until_end(passive_sockfd, &message)
+    if (send_command(control_sockfd, "PASS %s", ftp_url.password)
+        || ignore_until_end(control_sockfd, &message)
         || check_code(&message, 230, NULL)) {
         return 1;
     }
 
-    if (send_command(passive_sockfd, "TYPE I")
-        || ignore_until_end(passive_sockfd, &message)
+    if (send_command(control_sockfd, "TYPE I")
+        || ignore_until_end(control_sockfd, &message)
         || check_code(&message, 200, NULL)) {
         return 1;
     }
 
-    if (send_command(passive_sockfd, "SIZE %s", ftp_url.path)
-        || ignore_until_end(passive_sockfd, &message)
+    if (send_command(control_sockfd, "SIZE %s", ftp_url.path)
+        || ignore_until_end(control_sockfd, &message)
         || check_code(&message, 213, NULL)) {
         return 1;
     }
@@ -348,8 +348,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (send_command(passive_sockfd, "PASV")
-        || ignore_until_end(passive_sockfd, &message)
+    if (send_command(control_sockfd, "PASV")
+        || ignore_until_end(control_sockfd, &message)
         || check_code(&message, 227, NULL)) {
         return 1;
     }
@@ -359,14 +359,14 @@ int main(int argc, char **argv) {
     if (parse_pasv_response(message.content, addr, &port)) {
         return 1;
     }
-    int active_sockfd = get_socket_fd_addr(addr, port);
-    if (active_sockfd < 0) {
+    int data_sockfd = get_socket_fd_addr(addr, port);
+    if (data_sockfd < 0) {
         print_error(__func__, "get_socket_fd_addr() failed");
         return 1;
     }
 
-    if (send_command(passive_sockfd, "RETR %s", ftp_url.path)
-        || ignore_until_end(passive_sockfd, &message)
+    if (send_command(control_sockfd, "RETR %s", ftp_url.path)
+        || ignore_until_end(control_sockfd, &message)
         || check_code(&message, 150, 125, NULL)) {
         return 1;
     }
@@ -377,7 +377,7 @@ int main(int argc, char **argv) {
 
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    while ((response_len = read(active_sockfd, buffer, BUFFER_LEN)) > 0) {
+    while ((response_len = read(data_sockfd, buffer, BUFFER_LEN)) > 0) {
         write(file_fd, buffer, response_len);
 
         total_bytes += response_len;
@@ -385,22 +385,22 @@ int main(int argc, char **argv) {
     }
     clock_gettime(CLOCK_MONOTONIC, &end);
 
-    if (close(file_fd) || close(active_sockfd)) {
+    if (close(file_fd) || close(data_sockfd)) {
         print_error(__func__, "close() failed");
         return 1;
     }
 
-    if (read_message(passive_sockfd, &message) || check_code(&message, 226)) {
+    if (read_message(control_sockfd, &message) || check_code(&message, 226)) {
         return 1;
     }
 
-    if (send_command(passive_sockfd, "QUIT")
-        || read_message(passive_sockfd, &message)
+    if (send_command(control_sockfd, "QUIT")
+        || read_message(control_sockfd, &message)
         || check_code(&message, 221, NULL)) {
         return 1;
     }
 
-    if (close(passive_sockfd)) {
+    if (close(control_sockfd)) {
         print_error(__func__, "close() failed");
         return 1;
     }
