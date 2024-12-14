@@ -27,7 +27,7 @@ typedef struct {
     char path[BUFFER_LEN + 1];
 } FtpUrl;
 
-// Structure to store a message received from the server
+// Structure to store a line from a response received from the server
 typedef struct {
     int code;
     char content[BUFFER_LEN + 1];
@@ -84,12 +84,15 @@ int parse_url(char *url, FtpUrl *ftp_url) {
     }
 
     char *username, *password;
-    if (username_password == NULL
-        || (username = strtok(username_password, ":")) == NULL
-        || (password = strtok(NULL, "")) == NULL) {
-        
+    if (username_password == NULL) {
         username = "anonymous";
         password = "anonymous";
+    } else if (strchr(username_password, ':') == NULL) {
+        username = username_password;
+        password = "anonymous";
+    } else {
+        username = strtok(username_password, ":");
+        password = strtok(NULL, "");
     }
 
     strlcpy(ftp_url->username, username, BUFFER_LEN);
