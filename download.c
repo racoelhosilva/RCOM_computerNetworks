@@ -102,17 +102,6 @@ int parse_url(char *url, FtpUrl *ftp_url) {
 
     return 0;
 }
-
-// Get the host information from a domain, using gethostbyname
-struct hostent *get_host(const char *domain) {
-    struct hostent *host;
-    if ((host = gethostbyname(domain)) == NULL) {
-        print_error(__func__, "gethostbyname() failed");
-    }
-
-    return host;
-}
-
 // Get a socket file descriptor connected to a given address and port
 // Return the socket file descriptor on success and -1 otherwise
 int get_socket_fd_addr(const char *addr, uint16_t port) {
@@ -187,7 +176,7 @@ int read_message(int sockfd, Message *message) {
 
 // Read the final line of a socket response, ignoring all the previous ones
 // Return 0 on success and non-zero otherwise
-int ignore_until_end(int sockfd, Message *message) {
+int read_end(int sockfd, Message *message) {
     do {
         if (read_message(sockfd, message))
             return 1;
@@ -330,7 +319,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    struct hostent *host = get_host(ftp_url.domain);
+    struct hostent *host = gethostbyname(ftp_url.domain);
     if (host == NULL) {
         print_error(__func__, "Could not resolve host");
         return 1;
@@ -342,31 +331,31 @@ int main(int argc, char **argv) {
         print_error(__func__, "get_socket_fd_addr() failed");
         return 1;
     }
-    if (ignore_until_end(control_sockfd, &message)
+    if (read_end(control_sockfd, &message)
         || check_code(&message, 220, NULL)) {
         return 1;
     }
 
     if (send_command(control_sockfd, "USER %s", ftp_url.username)
-        || ignore_until_end(control_sockfd, &message)
+        || read_end(control_sockfd, &message)
         || check_code(&message, 331, NULL)) {
         return 1;
     }
 
     if (send_command(control_sockfd, "PASS %s", ftp_url.password)
-        || ignore_until_end(control_sockfd, &message)
+        || read_end(control_sockfd, &message)
         || check_code(&message, 230, NULL)) {
         return 1;
     }
 
     if (send_command(control_sockfd, "TYPE I")
-        || ignore_until_end(control_sockfd, &message)
+        || read_end(control_sockfd, &message)
         || check_code(&message, 200, NULL)) {
         return 1;
     }
 
     if (send_command(control_sockfd, "SIZE %s", ftp_url.path)
-        || ignore_until_end(control_sockfd, &message)
+        || read_end(control_sockfd, &message)
         || check_code(&message, 213, NULL)) {
         return 1;
     }
@@ -376,7 +365,7 @@ int main(int argc, char **argv) {
     }
 
     if (send_command(control_sockfd, "PASV")
-        || ignore_until_end(control_sockfd, &message)
+        || read_end(control_sockfd, &message)
         || check_code(&message, 227, NULL)) {
         return 1;
     }
@@ -393,7 +382,7 @@ int main(int argc, char **argv) {
     }
 
     if (send_command(control_sockfd, "RETR %s", ftp_url.path)
-        || ignore_until_end(control_sockfd, &message)
+        || read_end(control_sockfd, &message)
         || check_code(&message, 150, 125, NULL)) {
         return 1;
     }
