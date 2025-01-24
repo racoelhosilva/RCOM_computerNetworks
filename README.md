@@ -16,6 +16,12 @@ cd bin
 ./download <ftp-url>  # Download a file matching the FTP URL provided
 ```
 
+### Setup Guide
+
+The [guide file](./guide.md) contains a general step-by-step overview of the commands that need to be executed to setup the computer network. Please note that this guide is incomplete in some of the latter steps and the values obtained can vary between machines. 
+
+A more in-depth analysis can be found in the report. The guide was just something we wrote to keep track of the commands/instructions and help us during the initial classes.
+
 ---
 
 > Class: 3LEIC01 Group: 7  
